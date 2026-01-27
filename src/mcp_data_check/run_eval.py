@@ -23,18 +23,28 @@ def main():
     )
     parser.add_argument(
         "-q", "--questions",
-        default=None,
-        help="Path to questions CSV file (default: eval/questions.csv)"
+        required=True,
+        help="Path to questions CSV file"
     )
     parser.add_argument(
         "-o", "--output",
         default=None,
-        help="Output directory for results (default: eval/results)"
+        help="Output directory for results (default: ./results)"
+    )
+    parser.add_argument(
+        "-k", "--api-key",
+        default=None,
+        help="Anthropic API key (defaults to ANTHROPIC_API_KEY env var)"
     )
     parser.add_argument(
         "-m", "--model",
         default="claude-sonnet-4-20250514",
         help="Claude model to use (default: claude-sonnet-4-20250514)"
+    )
+    parser.add_argument(
+        "-n", "--server-name",
+        default="mcp-server",
+        help="Name for the MCP server (default: mcp-server)"
     )
     parser.add_argument(
         "-v", "--verbose",
@@ -45,9 +55,8 @@ def main():
     args = parser.parse_args()
 
     # Determine paths
-    eval_dir = Path(__file__).parent
-    questions_path = Path(args.questions) if args.questions else eval_dir / "questions.csv"
-    output_dir = Path(args.output) if args.output else eval_dir / "results"
+    questions_path = Path(args.questions)
+    output_dir = Path(args.output) if args.output else Path("./results")
 
     # Validate questions file exists
     if not questions_path.exists():
@@ -55,7 +64,12 @@ def main():
         sys.exit(1)
 
     # Create evaluator
-    evaluator = Evaluator(server_url=args.server_url, model=args.model)
+    evaluator = Evaluator(
+        server_url=args.server_url,
+        api_key=args.api_key,
+        model=args.model,
+        server_name=args.server_name
+    )
 
     # Load questions
     print(f"Loading questions from {questions_path}...")

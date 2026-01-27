@@ -33,20 +33,42 @@ class EvalSummary:
     by_eval_type: dict = field(default_factory=dict)
     results: list[EvalResult] = field(default_factory=list)
 
+    def to_dict(self) -> dict:
+        """Convert to a JSON-serializable dictionary."""
+        return {
+            "summary": {
+                "total": self.total,
+                "passed": self.passed,
+                "failed": self.failed,
+                "pass_rate": self.pass_rate,
+                "by_eval_type": self.by_eval_type
+            },
+            "results": [asdict(r) for r in self.results]
+        }
+
 
 class Evaluator:
     """Evaluates MCP server responses against expected answers."""
 
-    def __init__(self, server_url: str, model: str = "claude-sonnet-4-20250514"):
+    def __init__(
+        self,
+        server_url: str,
+        api_key: str | None = None,
+        model: str = "claude-sonnet-4-20250514",
+        server_name: str = "mcp-server"
+    ):
         """Initialize the evaluator.
 
         Args:
             server_url: URL of the MCP server to evaluate
+            api_key: Anthropic API key (uses ANTHROPIC_API_KEY env var if not provided)
             model: Claude model to use for generating responses
+            server_name: Name to use for the MCP server in API calls
         """
         self.server_url = server_url
         self.model = model
-        self.client = anthropic.Anthropic()
+        self.server_name = server_name
+        self.client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
 
     def load_questions(self, csv_path: str | Path) -> list[dict]:
         """Load questions from a CSV file.
@@ -85,7 +107,7 @@ class Evaluator:
                 {
                     "type": "url",
                     "url": self.server_url,
-                    "name": "nih-reporter"
+                    "name": self.server_name
                 }
             ],
             messages=[

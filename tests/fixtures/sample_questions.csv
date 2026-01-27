@@ -1,0 +1,5 @@
+question,expected_answer,eval_type
+How many grants were awarded in 2023?,150,numeric
+What is the total funding amount?,1000000,numeric
+Which agency received the most funding?,National Institutes of Health,string
+What is the name of the program?,Research Excellence Initiative,string
