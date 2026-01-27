@@ -8,10 +8,29 @@ dependencies = [
     "anthropic>=0.40.0",
     "python-dotenv>=1.0.0",
 ]
+authors = [{ name = "mark-aronson", email = "marksaronson@gmail.com" }]
+license = { text = "MIT" }
+keywords = ["mcp", "evaluation", "testing", "anthropic", "claude"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.urls]
+Homepage = "https://github.com/GSA-TTS/mcp-data-check"
+Repository = "https://github.com/GSA-TTS/mcp-data-check"
+Issues = "https://github.com/GSA-TTS/mcp-data-check/issues"
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
+    "twine>=5.0.0",
 ]
 
 [build-system]
