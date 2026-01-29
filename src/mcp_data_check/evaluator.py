@@ -23,6 +23,7 @@ class EvalResult:
     details: dict = field(default_factory=dict)
     error: str | None = None
     time_to_answer: float | None = None  # Time in seconds for MCP server response
+    tools_called: list[dict] = field(default_factory=list)  # MCP tools called during response
 
 
 @dataclass
@@ -92,14 +93,14 @@ class Evaluator:
                 })
         return questions
 
-    def call_model_with_mcp(self, question: str) -> tuple[str, float]:
+    def call_model_with_mcp(self, question: str) -> tuple[str, float, list[dict]]:
         """Call Claude with the MCP server to answer a question.
 
         Args:
             question: The question to ask
 
         Returns:
-            Tuple of (response_text, time_to_answer_in_seconds)
+            Tuple of (response_text, time_to_answer_in_seconds, tools_called)
         """
         start_time = time.perf_counter()
         response = self.client.beta.messages.create(
@@ -122,13 +123,20 @@ class Evaluator:
         )
         elapsed_time = time.perf_counter() - start_time
 
-        # Extract text from response
+        # Extract text and tool calls from response
         text_parts = []
+        tools_called = []
         for block in response.content:
             if block.type == "text":
                 text_parts.append(block.text)
+            elif block.type == "mcp_tool_use":
+                tools_called.append({
+                    "tool_name": block.name,
+                    "server_name": block.server_name,
+                    "input": block.input
+                })
 
-        return "\n".join(text_parts), elapsed_time
+        return "\n".join(text_parts), elapsed_time, tools_called
 
     def evaluate_response(
         self,
@@ -212,10 +220,11 @@ class Evaluator:
 
             # Call model with MCP server
             try:
-                model_response, time_to_answer = self.call_model_with_mcp(q["question"])
+                model_response, time_to_answer, tools_called = self.call_model_with_mcp(q["question"])
             except Exception as e:
                 model_response = ""
                 time_to_answer = None
+                tools_called = []
                 result = EvalResult(
                     question=q["question"],
                     expected_answer=q["expected_answer"],
@@ -223,7 +232,8 @@ class Evaluator:
                     model_response=model_response,
                     passed=False,
                     error=f"API call failed: {e}",
-                    time_to_answer=time_to_answer
+                    time_to_answer=time_to_answer,
+                    tools_called=tools_called
                 )
                 results.append(result)
                 continue
@@ -236,6 +246,7 @@ class Evaluator:
                 model_response
             )
             result.time_to_answer = time_to_answer
+            result.tools_called = tools_called
             results.append(result)
 
             # Track by eval type
