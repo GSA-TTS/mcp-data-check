@@ -170,8 +170,8 @@ class TestEvaluator:
                 api_key="test-key"
             )
 
-            # Mock the call_model_with_mcp method
-            evaluator.call_model_with_mcp = Mock(return_value="The answer is 150 grants")
+            # Mock the call_model_with_mcp method (returns tuple of response and time)
+            evaluator.call_model_with_mcp = Mock(return_value=("The answer is 150 grants", 1.5))
 
             questions = [
                 {
@@ -187,6 +187,7 @@ class TestEvaluator:
             assert summary.passed == 1
             assert summary.failed == 0
             assert summary.pass_rate == 1.0
+            assert summary.results[0].time_to_answer == 1.5
 
     def test_run_evaluation_with_failure(self):
         """Test run_evaluation when evaluation fails."""
@@ -198,8 +199,8 @@ class TestEvaluator:
                 api_key="test-key"
             )
 
-            # Mock response that doesn't match expected
-            evaluator.call_model_with_mcp = Mock(return_value="The answer is 999 grants")
+            # Mock response that doesn't match expected (returns tuple of response and time)
+            evaluator.call_model_with_mcp = Mock(return_value=("The answer is 999 grants", 2.3))
 
             questions = [
                 {
