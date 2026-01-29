@@ -2,6 +2,7 @@
 
 import csv
 import json
+import time
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
@@ -21,6 +22,7 @@ class EvalResult:
     passed: bool
     details: dict = field(default_factory=dict)
     error: str | None = None
+    time_to_answer: float | None = None  # Time in seconds for MCP server response
 
 
 @dataclass
@@ -90,15 +92,16 @@ class Evaluator:
                 })
         return questions
 
-    def call_model_with_mcp(self, question: str) -> str:
+    def call_model_with_mcp(self, question: str) -> tuple[str, float]:
         """Call Claude with the MCP server to answer a question.
 
         Args:
             question: The question to ask
 
         Returns:
-            The model's response text
+            Tuple of (response_text, time_to_answer_in_seconds)
         """
+        start_time = time.perf_counter()
         response = self.client.beta.messages.create(
             model=self.model,
             max_tokens=4096,
@@ -117,6 +120,7 @@ class Evaluator:
                 }
             ]
         )
+        elapsed_time = time.perf_counter() - start_time
 
         # Extract text from response
         text_parts = []
@@ -124,7 +128,7 @@ class Evaluator:
             if block.type == "text":
                 text_parts.append(block.text)
 
-        return "\n".join(text_parts)
+        return "\n".join(text_parts), elapsed_time
 
     def evaluate_response(
         self,
@@ -208,16 +212,18 @@ class Evaluator:
 
             # Call model with MCP server
             try:
-                model_response = self.call_model_with_mcp(q["question"])
+                model_response, time_to_answer = self.call_model_with_mcp(q["question"])
             except Exception as e:
                 model_response = ""
+                time_to_answer = None
                 result = EvalResult(
                     question=q["question"],
                     expected_answer=q["expected_answer"],
                     eval_type=q["eval_type"],
                     model_response=model_response,
                     passed=False,
-                    error=f"API call failed: {e}"
+                    error=f"API call failed: {e}",
+                    time_to_answer=time_to_answer
                 )
                 results.append(result)
                 continue
@@ -229,6 +235,7 @@ class Evaluator:
                 q["eval_type"],
                 model_response
             )
+            result.time_to_answer = time_to_answer
             results.append(result)
 
             # Track by eval type
@@ -241,7 +248,8 @@ class Evaluator:
 
             if verbose:
                 status = "PASS" if result.passed else "FAIL"
-                print(f"  Result: {status}")
+                time_str = f" ({result.time_to_answer:.2f}s)" if result.time_to_answer else ""
+                print(f"  Result: {status}{time_str}")
 
         # Calculate summary
         total = len(results)
