@@ -95,7 +95,15 @@ The `run_evaluation` function returns a dictionary:
             "model_response": "...",
             "passed": True,
             "details": {...},
-            "error": None
+            "error": None,
+            "time_to_answer": 2.35,
+            "tools_called": [
+                {
+                    "tool_name": "get_grants",
+                    "server_name": "mcp-server",
+                    "input": {"year": 2023}
+                }
+            ]
         },
         ...
     ],
@@ -106,6 +114,27 @@ The `run_evaluation` function returns a dictionary:
     }
 }
 ```
+
+### Result Fields
+
+Each result in the `results` array contains:
+
+| Field | Description |
+|-------|-------------|
+| `question` | The original question asked |
+| `expected_answer` | The expected answer from the CSV |
+| `eval_type` | Evaluation method used |
+| `model_response` | The model's full response text |
+| `passed` | Whether the evaluation passed |
+| `details` | Additional evaluation details |
+| `error` | Error message if the evaluation failed |
+| `time_to_answer` | Response time in seconds for the MCP server call |
+| `tools_called` | List of MCP tools invoked during the response |
+
+The `tools_called` array contains objects with:
+- `tool_name`: Name of the MCP tool called
+- `server_name`: Name of the MCP server that provided the tool
+- `input`: Parameters passed to the tool
 
 ## Requirements
 
