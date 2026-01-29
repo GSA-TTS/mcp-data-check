@@ -170,8 +170,8 @@ class TestEvaluator:
                 api_key="test-key"
             )
 
-            # Mock the call_model_with_mcp method (returns tuple of response and time)
-            evaluator.call_model_with_mcp = Mock(return_value=("The answer is 150 grants", 1.5))
+            # Mock the call_model_with_mcp method (returns tuple of response, time, and tools_called)
+            evaluator.call_model_with_mcp = Mock(return_value=("The answer is 150 grants", 1.5, []))
 
             questions = [
                 {
@@ -199,8 +199,8 @@ class TestEvaluator:
                 api_key="test-key"
             )
 
-            # Mock response that doesn't match expected (returns tuple of response and time)
-            evaluator.call_model_with_mcp = Mock(return_value=("The answer is 999 grants", 2.3))
+            # Mock response that doesn't match expected (returns tuple of response, time, and tools_called)
+            evaluator.call_model_with_mcp = Mock(return_value=("The answer is 999 grants", 2.3, []))
 
             questions = [
                 {
