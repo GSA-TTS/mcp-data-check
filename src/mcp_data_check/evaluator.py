@@ -123,18 +123,27 @@ class Evaluator:
         )
         elapsed_time = time.perf_counter() - start_time
 
-        # Extract text and tool calls from response
+        # Extract text, tool calls, and tool results from response
         text_parts = []
+        tool_uses_by_id = {}  # Map tool_use_id to tool call dict
         tools_called = []
+
         for block in response.content:
             if block.type == "text":
                 text_parts.append(block.text)
             elif block.type == "mcp_tool_use":
-                tools_called.append({
+                tool_call = {
                     "tool_name": block.name,
                     "server_name": block.server_name,
-                    "input": block.input
-                })
+                    "input": block.input,
+                    "api_response": None  # Will be populated when we see the result
+                }
+                tool_uses_by_id[block.id] = tool_call
+                tools_called.append(tool_call)
+            elif block.type == "mcp_tool_result":
+                # Link the result back to the tool use
+                if block.tool_use_id in tool_uses_by_id:
+                    tool_uses_by_id[block.tool_use_id]["api_response"] = block.content
 
         return "\n".join(text_parts), elapsed_time, tools_called
 
