@@ -141,9 +141,18 @@ class Evaluator:
                 tool_uses_by_id[block.id] = tool_call
                 tools_called.append(tool_call)
             elif block.type == "mcp_tool_result":
-                # Link the result back to the tool use
+                # Link the result back to the tool use, serializing content blocks
                 if block.tool_use_id in tool_uses_by_id:
-                    tool_uses_by_id[block.tool_use_id]["api_response"] = block.content
+                    # Convert content blocks to JSON-serializable format
+                    serialized_content = []
+                    for content_block in block.content:
+                        if hasattr(content_block, "model_dump"):
+                            serialized_content.append(content_block.model_dump())
+                        elif hasattr(content_block, "text"):
+                            serialized_content.append({"type": "text", "text": content_block.text})
+                        else:
+                            serialized_content.append(str(content_block))
+                    tool_uses_by_id[block.tool_use_id]["api_response"] = serialized_content
 
         return "\n".join(text_parts), elapsed_time, tools_called
 
