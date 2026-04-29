@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from .evaluator import Evaluator, EvalSummary, EvalResult, ComparisonResult, ComparisonSummary
+from .evaluator import Evaluator, EvalSummary, EvalResult, RepeatResult, ComparisonResult, ComparisonSummary
 from .eval_methods import evaluate_numeric, evaluate_string, evaluate_llm_judge
 
 
@@ -77,6 +77,7 @@ __all__ = [
     "Evaluator",
     "EvalSummary",
     "EvalResult",
+    "RepeatResult",
     "ComparisonResult",
     "ComparisonSummary",
     "evaluate_numeric",

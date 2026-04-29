@@ -16,6 +16,17 @@ SUPPORTED_PROVIDERS = ("anthropic", "openai")
 
 
 @dataclass
+class RepeatResult:
+    """Raw data from a single repeat run of one question."""
+    model_response: str
+    passed: bool
+    time_to_answer: float | None = None
+    tools_called: list[dict] = field(default_factory=list)
+    details: dict = field(default_factory=dict)
+    error: str | None = None
+
+
+@dataclass
 class EvalResult:
     """Result of evaluating a single question."""
     question: str
@@ -29,6 +40,7 @@ class EvalResult:
     tools_called: list[dict] = field(default_factory=list)
     repeat_count: int = 1
     repeat_pass_count: int | None = None
+    repeat_results: list[RepeatResult] = field(default_factory=list)
 
 
 @dataclass
@@ -392,32 +404,35 @@ class Evaluator:
             pass_count = 0
             total_time = 0.0
             last_result = None
+            repeat_results = []
 
             for rep in range(repeats):
                 try:
                     model_response, time_to_answer, tools_called = self.call_model_with_mcp(q["question"])
                 except Exception as e:
-                    last_result = EvalResult(
-                        question=q["question"],
-                        expected_answer=q["expected_answer"],
-                        eval_type=q["eval_type"],
+                    repeat_results.append(RepeatResult(
                         model_response="",
                         passed=False,
                         error=f"API call failed: {e}",
-                        repeat_count=repeats,
-                        repeat_pass_count=pass_count,
-                    )
+                    ))
                     continue
 
                 rep_result = self.evaluate_response(
                     q["question"], q["expected_answer"], q["eval_type"], model_response
                 )
-                rep_result.tools_called = tools_called
                 if time_to_answer is not None:
                     total_time += time_to_answer
                 if rep_result.passed:
                     pass_count += 1
                 last_result = rep_result
+                repeat_results.append(RepeatResult(
+                    model_response=model_response,
+                    passed=rep_result.passed,
+                    time_to_answer=time_to_answer,
+                    tools_called=tools_called,
+                    details=rep_result.details,
+                    error=rep_result.error,
+                ))
 
             if last_result is None:
                 last_result = EvalResult(
@@ -429,12 +444,14 @@ class Evaluator:
                     error="All repeat attempts failed",
                     repeat_count=repeats,
                     repeat_pass_count=0,
+                    repeat_results=repeat_results,
                 )
             else:
                 last_result.passed = pass_count > repeats / 2
                 last_result.time_to_answer = total_time / repeats if repeats > 0 else None
                 last_result.repeat_count = repeats
                 last_result.repeat_pass_count = pass_count
+                last_result.repeat_results = repeat_results
 
             results.append(last_result)
 
@@ -489,6 +506,7 @@ class Evaluator:
             mcp_pass_count = 0
             mcp_total_time = 0.0
             last_mcp_result = None
+            mcp_repeat_results = []
 
             for _ in range(repeats):
                 try:
@@ -496,20 +514,24 @@ class Evaluator:
                     rep = self.evaluate_response(
                         q["question"], q["expected_answer"], q["eval_type"], mcp_response
                     )
-                    rep.tools_called = tools_called
                     mcp_total_time += mcp_time
                     if rep.passed:
                         mcp_pass_count += 1
                     last_mcp_result = rep
+                    mcp_repeat_results.append(RepeatResult(
+                        model_response=mcp_response,
+                        passed=rep.passed,
+                        time_to_answer=mcp_time,
+                        tools_called=tools_called,
+                        details=rep.details,
+                        error=rep.error,
+                    ))
                 except Exception as e:
-                    last_mcp_result = EvalResult(
-                        question=q["question"],
-                        expected_answer=q["expected_answer"],
-                        eval_type=q["eval_type"],
+                    mcp_repeat_results.append(RepeatResult(
                         model_response="",
                         passed=False,
                         error=f"API call failed: {e}",
-                    )
+                    ))
 
             if last_mcp_result is None:
                 last_mcp_result = EvalResult(
@@ -521,17 +543,20 @@ class Evaluator:
                     error="All repeat attempts failed",
                     repeat_count=repeats,
                     repeat_pass_count=0,
+                    repeat_results=mcp_repeat_results,
                 )
             else:
                 last_mcp_result.passed = mcp_pass_count > repeats / 2
                 last_mcp_result.time_to_answer = mcp_total_time / repeats if repeats > 0 else None
                 last_mcp_result.repeat_count = repeats
                 last_mcp_result.repeat_pass_count = mcp_pass_count
+                last_mcp_result.repeat_results = mcp_repeat_results
 
             # Baseline calls (no MCP)
             base_pass_count = 0
             base_total_time = 0.0
             last_base_result = None
+            base_repeat_results = []
 
             for _ in range(repeats):
                 try:
@@ -543,15 +568,20 @@ class Evaluator:
                     if rep.passed:
                         base_pass_count += 1
                     last_base_result = rep
+                    base_repeat_results.append(RepeatResult(
+                        model_response=baseline_response,
+                        passed=rep.passed,
+                        time_to_answer=baseline_time,
+                        tools_called=[],
+                        details=rep.details,
+                        error=rep.error,
+                    ))
                 except Exception as e:
-                    last_base_result = EvalResult(
-                        question=q["question"],
-                        expected_answer=q["expected_answer"],
-                        eval_type=q["eval_type"],
+                    base_repeat_results.append(RepeatResult(
                         model_response="",
                         passed=False,
                         error=f"API call failed: {e}",
-                    )
+                    ))
 
             if last_base_result is None:
                 last_base_result = EvalResult(
@@ -563,12 +593,14 @@ class Evaluator:
                     error="All repeat attempts failed",
                     repeat_count=repeats,
                     repeat_pass_count=0,
+                    repeat_results=base_repeat_results,
                 )
             else:
                 last_base_result.passed = base_pass_count > repeats / 2
                 last_base_result.time_to_answer = base_total_time / repeats if repeats > 0 else None
                 last_base_result.repeat_count = repeats
                 last_base_result.repeat_pass_count = base_pass_count
+                last_base_result.repeat_results = base_repeat_results
 
             results.append(ComparisonResult(mcp=last_mcp_result, baseline=last_base_result))
 
