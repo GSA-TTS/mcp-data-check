@@ -32,14 +32,20 @@ def main():
         help="Output directory for results (default: ./results)"
     )
     parser.add_argument(
+        "-p", "--provider",
+        default="anthropic",
+        choices=["anthropic", "openai"],
+        help="LLM provider to use (default: anthropic)"
+    )
+    parser.add_argument(
         "-k", "--api-key",
         default=None,
-        help="Anthropic API key (defaults to ANTHROPIC_API_KEY env var)"
+        help="API key for the chosen provider (defaults to ANTHROPIC_API_KEY or OPENAI_API_KEY env var)"
     )
     parser.add_argument(
         "-m", "--model",
         default="claude-sonnet-4-20250514",
-        help="Claude model to use (default: claude-sonnet-4-20250514)"
+        help="Model to use for evaluation (default: claude-sonnet-4-20250514; use e.g. gpt-4o for OpenAI)"
     )
     parser.add_argument(
         "-n", "--server-name",
@@ -68,7 +74,8 @@ def main():
         server_url=args.server_url,
         api_key=args.api_key,
         model=args.model,
-        server_name=args.server_name
+        server_name=args.server_name,
+        provider=args.provider,
     )
 
     # Load questions

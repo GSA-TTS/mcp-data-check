@@ -2,7 +2,25 @@
 
 import re
 from difflib import SequenceMatcher
-import anthropic
+from typing import Any
+
+
+def _call_llm(
+    client: Any,
+    provider: str,
+    model: str,
+    messages: list[dict],
+    max_tokens: int,
+) -> str:
+    """Dispatch a completion call to the appropriate provider API and return the text."""
+    if provider == "anthropic":
+        response = client.messages.create(model=model, max_tokens=max_tokens, messages=messages)
+        return response.content[0].text.strip()
+    elif provider == "openai":
+        response = client.chat.completions.create(model=model, max_tokens=max_tokens, messages=messages)
+        return response.choices[0].message.content.strip()
+    else:
+        raise ValueError(f"Unknown provider: {provider!r}")
 
 
 def extract_number(text: str) -> float | None:
@@ -10,12 +28,8 @@ def extract_number(text: str) -> float | None:
 
     Handles integers, floats, and numbers with commas (e.g., "1,234").
     """
-    # Remove commas from numbers
     text = text.replace(",", "")
-
-    # Find all numbers (including decimals and negative)
     numbers = re.findall(r"-?\d+\.?\d*", text)
-
     if numbers:
         try:
             return float(numbers[0])
@@ -48,14 +62,21 @@ def extract_all_numbers(text: str) -> list[float]:
 def is_likely_year(num: float, expected_hint: float | None) -> bool:
     """Check if number looks like a year (1900-2100) unless expected is in that range."""
     if expected_hint and 1900 <= expected_hint <= 2100:
-        return False  # Expected answer is a year, don't filter
+        return False
     return 1900 <= num <= 2100 and num == int(num)
 
 
 def extract_number_with_llm(
-    text: str, question: str, client: anthropic.Anthropic
+    text: str,
+    question: str,
+    client: Any,
+    provider: str = "anthropic",
+    model: str | None = None,
 ) -> float | None:
-    """Use Claude Haiku to extract the numeric answer from response text."""
+    """Use an LLM to extract the numeric answer from response text."""
+    if model is None:
+        model = "claude-3-5-haiku-20241022" if provider == "anthropic" else "gpt-4o-mini"
+
     prompt = f"""Extract ONLY the numeric answer from this response to the question.
 
 Question: {question}
@@ -63,13 +84,7 @@ Response: {text}
 
 Reply with just the number (no commas, no units, no explanation). If no clear answer, reply "NONE"."""
 
-    message = client.messages.create(
-        model="claude-3-5-haiku-20241022",
-        max_tokens=50,
-        messages=[{"role": "user", "content": prompt}]
-    )
-
-    result = message.content[0].text.strip()
+    result = _call_llm(client, provider, model, [{"role": "user", "content": prompt}], 50)
     if result.upper() == "NONE":
         return None
     try:
@@ -82,7 +97,9 @@ def extract_number_smart(
     text: str,
     question: str = "",
     expected_hint: float | None = None,
-    client: anthropic.Anthropic | None = None
+    client: Any = None,
+    provider: str = "anthropic",
+    model: str | None = None,
 ) -> tuple[float | None, str]:
     """Extract a number using multiple strategies.
 
@@ -118,11 +135,10 @@ def extract_number_smart(
 
     # Strategy 4: LLM fallback
     if client:
-        llm_result = extract_number_with_llm(text, question, client)
+        llm_result = extract_number_with_llm(text, question, client, provider, model)
         if llm_result:
             return (llm_result, "llm_extraction")
 
-    # Fallback: original behavior (first number found)
     return (extract_number(text), "first_number")
 
 
@@ -131,7 +147,9 @@ def evaluate_numeric(
     expected: str | float | int,
     tolerance: float = 0.05,
     question: str = "",
-    client: anthropic.Anthropic | None = None
+    client: Any = None,
+    provider: str = "anthropic",
+    model: str | None = None,
 ) -> dict:
     """Evaluate a numeric response against an expected value.
 
@@ -140,13 +158,14 @@ def evaluate_numeric(
         expected: The expected numeric value (as string or number)
         tolerance: Relative tolerance for comparison (default 5%)
         question: The original question (used for LLM extraction fallback)
-        client: Anthropic client (used for LLM extraction fallback)
+        client: API client for the LLM extraction fallback
+        provider: Which provider the client belongs to ('anthropic' or 'openai')
+        model: Model to use for LLM extraction fallback
 
     Returns:
         dict with 'passed', 'extracted_value', 'expected_value', 'extraction_method',
         and 'details'
     """
-    # Convert expected to float
     if isinstance(expected, str):
         expected_value = extract_number(expected)
     else:
@@ -161,9 +180,8 @@ def evaluate_numeric(
             "details": "Could not parse expected value as a number"
         }
 
-    # Extract number from response using smart extraction
     extracted_value, extraction_method = extract_number_smart(
-        response, question, expected_value, client
+        response, question, expected_value, client, provider, model
     )
 
     if extracted_value is None:
@@ -175,7 +193,6 @@ def evaluate_numeric(
             "details": "Could not extract a number from the response"
         }
 
-    # Calculate relative difference
     if expected_value == 0:
         passed = extracted_value == 0
         diff = abs(extracted_value)
@@ -213,7 +230,6 @@ def evaluate_string(
     response_lower = response.lower()
     expected_lower = expected.lower()
 
-    # Check for exact match (case-insensitive)
     if expected_lower in response_lower:
         return {
             "passed": True,
@@ -222,15 +238,12 @@ def evaluate_string(
             "details": f"Found exact match for '{expected}' in response"
         }
 
-    # Try fuzzy matching - check if any substring is similar
-    # Slide a window of expected length over the response
     best_ratio = 0.0
     best_match = ""
 
     words = response.split()
     expected_words = expected.split()
 
-    # For multi-word expected values, check word sequences
     for i in range(len(words) - len(expected_words) + 1):
         window = " ".join(words[i:i + len(expected_words)])
         ratio = SequenceMatcher(None, window.lower(), expected_lower).ratio()
@@ -238,7 +251,6 @@ def evaluate_string(
             best_ratio = ratio
             best_match = window
 
-    # Also check the full response similarity
     full_ratio = SequenceMatcher(None, response_lower, expected_lower).ratio()
     if full_ratio > best_ratio:
         best_ratio = full_ratio
@@ -258,21 +270,35 @@ def evaluate_llm_judge(
     question: str,
     response: str,
     expected: str,
-    client: anthropic.Anthropic | None = None
+    client: Any = None,
+    provider: str = "anthropic",
+    model: str | None = None,
 ) -> dict:
-    """Use Claude as a judge to evaluate semantic correctness.
+    """Use an LLM as a judge to evaluate semantic correctness.
 
     Args:
         question: The original question asked
         response: The model's response
         expected: The expected answer or key points
-        client: Anthropic client (creates one if not provided)
+        client: API client (creates one from env vars if not provided)
+        provider: Which provider to use ('anthropic' or 'openai')
+        model: Model to use for judging
 
     Returns:
         dict with 'passed', 'score', 'reasoning', and 'details'
     """
+    if model is None:
+        model = "claude-sonnet-4-20250514" if provider == "anthropic" else "gpt-4o"
+
     if client is None:
-        client = anthropic.Anthropic()
+        if provider == "anthropic":
+            import anthropic as _anthropic
+            client = _anthropic.Anthropic()
+        elif provider == "openai":
+            import openai as _openai
+            client = _openai.OpenAI()
+        else:
+            raise ValueError(f"Unknown provider: {provider!r}")
 
     judge_prompt = f"""You are evaluating whether an AI assistant's response correctly answers a question about NIH research grants.
 
@@ -289,17 +315,12 @@ SCORE: [0-10] (0 = completely wrong, 10 = perfectly correct)
 REASONING: [Your explanation of why you gave this score]
 VERDICT: [PASS or FAIL] (PASS if score >= 7)"""
 
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=500,
-        messages=[
-            {"role": "user", "content": judge_prompt}
-        ]
+    judge_response = _call_llm(
+        client, provider, model,
+        [{"role": "user", "content": judge_prompt}],
+        500,
     )
 
-    judge_response = message.content[0].text
-
-    # Parse the judge's response
     score = 0
     reasoning = ""
     verdict = "FAIL"

@@ -1,11 +1,12 @@
 [project]
 name = "mcp-data-check"
-version = "0.4.1"
+version = "0.5.0"
 description = "Evaluate MCP server accuracy against known questions and answers"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "anthropic>=0.40.0",
+    "openai>=1.0.0",
     "python-dotenv>=1.0.0",
 ]
 authors = [{ name = "mark-aronson", email = "marksaronson@gmail.com" }]
