@@ -18,6 +18,8 @@ pip install -e .
 
 ### Python API
 
+**Anthropic (default)**
+
 ```python
 from mcp_data_check import run_evaluation
 
@@ -31,18 +33,41 @@ print(f"Pass rate: {results['summary']['pass_rate']:.1%}")
 print(f"Passed: {results['summary']['passed']}/{results['summary']['total']}")
 ```
 
+**OpenAI**
+
+```python
+from mcp_data_check import run_evaluation
+
+results = run_evaluation(
+    questions_filepath="questions.csv",
+    api_key="sk-...",
+    server_url="https://mcp.example.com/sse",
+    provider="openai",
+    model="gpt-4o"
+)
+```
+
 ### Command Line
+
+**Anthropic (default)**
 
 ```bash
 mcp-data-check https://mcp.example.com/sse -q questions.csv -k YOUR_API_KEY
 ```
 
+**OpenAI**
+
+```bash
+mcp-data-check https://mcp.example.com/sse -q questions.csv -p openai -m gpt-4o -k YOUR_API_KEY
+```
+
 Options:
 - `-q, --questions`: Path to questions CSV file (required)
-- `-k, --api-key`: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
-- `-o, --output`: Output directory for results (default: ./results)
-- `-m, --model`: Claude model to use (default: claude-sonnet-4-20250514)
-- `-n, --server-name`: Name for the MCP server (default: mcp-server)
+- `-p, --provider`: LLM provider to use: `anthropic` (default) or `openai`
+- `-k, --api-key`: API key for the chosen provider (defaults to `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` env var)
+- `-o, --output`: Output directory for results (default: `./results`)
+- `-m, --model`: Model to use for evaluation (default: `claude-sonnet-4-20250514`; use e.g. `gpt-4o` for OpenAI)
+- `-n, --server-name`: Name for the MCP server (default: `mcp-server`)
 - `-v, --verbose`: Print detailed progress
 
 ## Questions CSV Format
@@ -68,7 +93,7 @@ Explain the grant distribution,Most grants went to research institutions...,llm_
 
 - **numeric**: Extracts numbers from responses and compares with 5% tolerance
 - **string**: Checks if expected string appears in response (case-insensitive)
-- **llm_judge**: Uses Claude to semantically evaluate if the response is correct
+- **llm_judge**: Uses the selected model to semantically evaluate if the response is correct
 
 ## Return Value
 
@@ -110,6 +135,7 @@ The `run_evaluation` function returns a dictionary:
     "metadata": {
         "server_url": "https://mcp.example.com/sse",
         "model": "claude-sonnet-4-20250514",
+        "provider": "anthropic",
         "timestamp": "20250127_143022"
     }
 }
@@ -139,4 +165,4 @@ The `tools_called` array contains objects with:
 ## Requirements
 
 - Python 3.10+
-- Anthropic API key with MCP beta access
+- API key for your chosen provider (Anthropic or OpenAI)

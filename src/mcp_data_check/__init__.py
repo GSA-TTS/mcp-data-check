@@ -12,23 +12,26 @@ def run_evaluation(
     server_url: str,
     model: str = "claude-sonnet-4-20250514",
     server_name: str = "mcp-server",
-    verbose: bool = False
+    verbose: bool = False,
+    provider: str = "anthropic",
 ) -> dict:
     """Run MCP server evaluation and return results as JSON.
 
     Args:
         questions_filepath: Path to a CSV file with columns: question, expected_answer, eval_type
-        api_key: Anthropic API key for authentication
+        api_key: API key for the chosen provider (ANTHROPIC_API_KEY or OPENAI_API_KEY)
         server_url: URL of the remote MCP server to evaluate
-        model: Claude model to use for generating responses (default: claude-sonnet-4-20250514)
+        model: Model to use for generating responses and evaluation
+               (default: claude-sonnet-4-20250514 for Anthropic; set to e.g. gpt-4o for OpenAI)
         server_name: Name to use for the MCP server (default: mcp-server)
         verbose: Whether to print progress during evaluation (default: False)
+        provider: Which LLM provider to use: 'anthropic' (default) or 'openai'
 
     Returns:
         dict containing:
             - summary: dict with total, passed, failed, pass_rate, by_eval_type
             - results: list of individual evaluation results
-            - metadata: dict with server_url, model, and timestamp
+            - metadata: dict with server_url, model, provider, and timestamp
 
     Example:
         >>> from mcp_data_check import run_evaluation
@@ -49,7 +52,8 @@ def run_evaluation(
         server_url=server_url,
         api_key=api_key,
         model=model,
-        server_name=server_name
+        server_name=server_name,
+        provider=provider,
     )
 
     questions = evaluator.load_questions(questions_path)
@@ -62,6 +66,7 @@ def run_evaluation(
         "metadata": {
             "server_url": server_url,
             "model": model,
+            "provider": provider,
             "timestamp": timestamp
         }
     }
