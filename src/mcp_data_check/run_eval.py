@@ -57,6 +57,17 @@ def main():
         action="store_true",
         help="Print detailed progress"
     )
+    parser.add_argument(
+        "--compare",
+        action="store_true",
+        help="Run each question with and without MCP server and compare results"
+    )
+    parser.add_argument(
+        "-r", "--repeats",
+        type=int,
+        default=5,
+        help="Number of times to run each question (majority vote determines pass/fail, default: 5)"
+    )
 
     args = parser.parse_args()
 
@@ -83,45 +94,88 @@ def main():
     questions = evaluator.load_questions(questions_path)
     print(f"Loaded {len(questions)} questions")
 
-    # Run evaluation
-    print(f"\nEvaluating against {args.server_url}...")
     print("-" * 50)
 
-    summary = evaluator.run_evaluation(questions, verbose=args.verbose)
+    if args.compare:
+        print(f"\nComparing MCP vs baseline against {args.server_url}...")
+        print("-" * 50)
 
-    # Print summary
-    print("-" * 50)
-    print("\nEvaluation Summary")
-    print("=" * 50)
-    print(f"Total questions: {summary.total}")
-    print(f"Passed: {summary.passed}")
-    print(f"Failed: {summary.failed}")
-    print(f"Pass rate: {summary.pass_rate:.1%}")
+        comparison = evaluator.run_comparison(questions, verbose=args.verbose, repeats=args.repeats)
 
-    if summary.by_eval_type:
-        print("\nBy evaluation type:")
-        for eval_type, stats in summary.by_eval_type.items():
-            type_rate = stats["passed"] / stats["total"] if stats["total"] > 0 else 0
-            print(f"  {eval_type}: {stats['passed']}/{stats['total']} ({type_rate:.1%})")
+        print("-" * 50)
+        print("\nComparison Summary")
+        print("=" * 50)
+        print(f"Total questions:    {comparison.total}")
+        print(f"MCP pass rate:      {comparison.mcp_passed}/{comparison.total} ({comparison.mcp_pass_rate:.1%})")
+        print(f"Baseline pass rate: {comparison.baseline_passed}/{comparison.total} ({comparison.baseline_pass_rate:.1%})")
+        delta = comparison.mcp_pass_rate - comparison.baseline_pass_rate
+        print(f"Delta (MCP - base): {delta:+.1%}")
 
-    # Print failed questions
-    failed_results = [r for r in summary.results if not r.passed]
-    if failed_results:
-        print(f"\nFailed questions ({len(failed_results)}):")
-        for r in failed_results:
-            print(f"\n  Q: {r.question[:80]}...")
-            print(f"  Expected: {r.expected_answer[:50]}...")
-            if r.error:
-                print(f"  Error: {r.error}")
-            else:
-                print(f"  Details: {r.details.get('details', 'N/A')}")
+        print("\nBreakdown:")
+        print(f"  Both passed:      {comparison.both_passed}")
+        print(f"  Neither passed:   {comparison.neither_passed}")
+        print(f"  MCP only passed:  {comparison.mcp_only_passed}")
+        print(f"  Baseline only:    {comparison.baseline_only_passed}")
 
-    # Save results
-    output_path = evaluator.save_results(summary, output_dir)
-    print(f"\nResults saved to: {output_path}")
+        # Print questions where results differ
+        differing = [r for r in comparison.results if r.mcp.passed != r.baseline.passed]
+        if differing:
+            print(f"\nQuestions where MCP and baseline differ ({len(differing)}):")
+            for r in differing:
+                mcp_str = "PASS" if r.mcp.passed else "FAIL"
+                base_str = "PASS" if r.baseline.passed else "FAIL"
+                print(f"\n  Q: {r.mcp.question[:80]}...")
+                print(f"  MCP: {mcp_str}  |  Baseline: {base_str}")
+                if not r.mcp.passed and r.mcp.error:
+                    print(f"  MCP error: {r.mcp.error}")
+                if not r.baseline.passed and r.baseline.error:
+                    print(f"  Baseline error: {r.baseline.error}")
 
-    # Exit with non-zero if any failures
-    sys.exit(0 if summary.failed == 0 else 1)
+        output_path = evaluator.save_comparison(comparison, output_dir)
+        print(f"\nResults saved to: {output_path}")
+
+        sys.exit(0 if comparison.mcp_passed == comparison.total else 1)
+
+    else:
+        # Run evaluation
+        print(f"\nEvaluating against {args.server_url}...")
+        print("-" * 50)
+
+        summary = evaluator.run_evaluation(questions, verbose=args.verbose, repeats=args.repeats)
+
+        # Print summary
+        print("-" * 50)
+        print("\nEvaluation Summary")
+        print("=" * 50)
+        print(f"Total questions: {summary.total}")
+        print(f"Passed: {summary.passed}")
+        print(f"Failed: {summary.failed}")
+        print(f"Pass rate: {summary.pass_rate:.1%}")
+
+        if summary.by_eval_type:
+            print("\nBy evaluation type:")
+            for eval_type, stats in summary.by_eval_type.items():
+                type_rate = stats["passed"] / stats["total"] if stats["total"] > 0 else 0
+                print(f"  {eval_type}: {stats['passed']}/{stats['total']} ({type_rate:.1%})")
+
+        # Print failed questions
+        failed_results = [r for r in summary.results if not r.passed]
+        if failed_results:
+            print(f"\nFailed questions ({len(failed_results)}):")
+            for r in failed_results:
+                print(f"\n  Q: {r.question[:80]}...")
+                print(f"  Expected: {r.expected_answer[:50]}...")
+                if r.error:
+                    print(f"  Error: {r.error}")
+                else:
+                    print(f"  Details: {r.details.get('details', 'N/A')}")
+
+        # Save results
+        output_path = evaluator.save_results(summary, output_dir)
+        print(f"\nResults saved to: {output_path}")
+
+        # Exit with non-zero if any failures
+        sys.exit(0 if summary.failed == 0 else 1)
 
 
 if __name__ == "__main__":

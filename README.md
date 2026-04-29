@@ -61,6 +61,18 @@ mcp-data-check https://mcp.example.com/sse -q questions.csv -k YOUR_API_KEY
 mcp-data-check https://mcp.example.com/sse -q questions.csv -p openai -m gpt-4o -k YOUR_API_KEY
 ```
 
+**Baseline comparison (MCP vs no tools)**
+
+```bash
+# Anthropic
+mcp-data-check https://mcp.example.com/sse -q questions.csv --compare
+
+# OpenAI
+mcp-data-check https://mcp.example.com/sse -q questions.csv -p openai -m gpt-4o --compare
+```
+
+Each question is run `--repeats` times per mode (default 5). Pass/fail is determined by majority vote. Results are saved to `./results/comparison_<timestamp>.json`.
+
 Options:
 - `-q, --questions`: Path to questions CSV file (required)
 - `-p, --provider`: LLM provider to use: `anthropic` (default) or `openai`
@@ -68,7 +80,47 @@ Options:
 - `-o, --output`: Output directory for results (default: `./results`)
 - `-m, --model`: Model to use for evaluation (default: `claude-sonnet-4-20250514`; use e.g. `gpt-4o` for OpenAI)
 - `-n, --server-name`: Name for the MCP server (default: `mcp-server`)
+- `-r, --repeats`: Number of times to run each question (default: 5; majority vote determines pass/fail)
 - `-v, --verbose`: Print detailed progress
+- `--compare`: Run each question with and without the MCP server and report the delta
+
+### Baseline Comparison (Python API)
+
+**Anthropic**
+
+```python
+from mcp_data_check import Evaluator
+
+evaluator = Evaluator(server_url="https://mcp.example.com/sse", api_key="sk-ant-...")
+questions = evaluator.load_questions("questions.csv")
+
+comparison = evaluator.run_comparison(questions, repeats=5, verbose=True)
+
+print(f"MCP pass rate:      {comparison.mcp_pass_rate:.1%}")
+print(f"Baseline pass rate: {comparison.baseline_pass_rate:.1%}")
+print(f"Delta:              {comparison.mcp_pass_rate - comparison.baseline_pass_rate:+.1%}")
+
+evaluator.save_comparison(comparison, "./results")
+```
+
+**OpenAI**
+
+```python
+from mcp_data_check import Evaluator
+
+evaluator = Evaluator(
+    server_url="https://mcp.example.com/sse",
+    api_key="sk-...",
+    provider="openai",
+    model="gpt-4o"
+)
+questions = evaluator.load_questions("questions.csv")
+
+comparison = evaluator.run_comparison(questions, repeats=5, verbose=True)
+
+print(f"MCP pass rate:      {comparison.mcp_pass_rate:.1%}")
+print(f"Baseline pass rate: {comparison.baseline_pass_rate:.1%}")
+```
 
 ## Questions CSV Format
 
@@ -154,8 +206,10 @@ Each result in the `results` array contains:
 | `passed` | Whether the evaluation passed |
 | `details` | Additional evaluation details |
 | `error` | Error message if the evaluation failed |
-| `time_to_answer` | Response time in seconds for the MCP server call |
+| `time_to_answer` | Average response time in seconds across repeats |
 | `tools_called` | List of MCP tools invoked during the response |
+| `repeat_count` | Number of times the question was run |
+| `repeat_pass_count` | Number of runs that passed (out of `repeat_count`) |
 
 The `tools_called` array contains objects with:
 - `tool_name`: Name of the MCP tool called
